@@ -466,11 +466,7 @@ const NumberPatternAnalyzer = () => {
                       )}
                       <div className={`${index === 0 ? 'text-8xl' : 'text-6xl'} font-black mb-3`}
                            style={{
-                             background: index === 0
-                               ? 'linear-gradient(135deg, #fbbf24, #f97316)'
-                               : 'linear-gradient(135deg, #06b6d4, #8b5cf6)',
-                             WebkitBackgroundClip: 'text',
-                             WebkitTextFillColor: 'transparent'
+                             color: index === 0 ? '#fbbf24' : '#06b6d4'
                            }}>
                         {pred.digit}
                       </div>
