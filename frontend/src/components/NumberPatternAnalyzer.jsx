@@ -2,6 +2,21 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Upload, TrendingUp, Activity, BarChart3, Zap, Eye, FileText, Brain, Cpu, Target } from 'lucide-react';
 
+// Import prediction methods from the predictions folder
+import {
+  calculateHigherOrderMarkov,
+  calculateVariableOrderMarkov,
+  calculateKneserNeySmoothing,
+  calculateRecencyWeightedMarkov,
+  calculatePatternCompletion,
+  calculatePositionalPatterns,
+  calculateSequenceMomentum,
+  calculateBayesianAveraging,
+  calculateEntropyWeighting,
+  calculateChangePointDetection,
+  calculateEnsemblePrediction
+} from './predictions';
+
 const NumberPatternAnalyzer = () => {
   const [data, setData] = useState([]);
   const [windowSize, setWindowSize] = useState(30);
@@ -34,327 +49,71 @@ const NumberPatternAnalyzer = () => {
     }
   };
 
-  // 1. HIGHER-ORDER MARKOV CHAINS
-  const higherOrderMarkov = useMemo(() => {
-    if (data.length < 6) return {};
+  // Use imported prediction methods
+  const higherOrderMarkov = useMemo(() => calculateHigherOrderMarkov(data), [data]);
 
-    const orders = {};
-    for (let order = 1; order <= 5; order++) {
-      const transitions = {};
+  const variableOrderMarkov = useMemo(() =>
+    calculateVariableOrderMarkov(data, higherOrderMarkov),
+    [data, higherOrderMarkov]
+  );
 
-      for (let i = 0; i < data.length - order; i++) {
-        const context = data.slice(i, i + order).join(',');
-        const next = data[i + order];
+  const kneserNeySmoothing = useMemo(() =>
+    calculateKneserNeySmoothing(data, higherOrderMarkov),
+    [data, higherOrderMarkov]
+  );
 
-        if (!transitions[context]) transitions[context] = Array(10).fill(0);
-        transitions[context][next]++;
-      }
+  const recencyWeightedMarkov = useMemo(() =>
+    calculateRecencyWeightedMarkov(data),
+    [data]
+  );
 
-      const probabilities = {};
-      Object.keys(transitions).forEach(ctx => {
-        const total = transitions[ctx].reduce((a, b) => a + b, 0);
-        probabilities[ctx] = transitions[ctx].map(count => total > 0 ? count / total : 0);
-      });
+  const patternCompletion = useMemo(() =>
+    calculatePatternCompletion(data),
+    [data]
+  );
 
-      orders[order] = { transitions, probabilities };
-    }
+  const positionalPatterns = useMemo(() =>
+    calculatePositionalPatterns(data),
+    [data]
+  );
 
-    return orders;
-  }, [data]);
+  const sequenceMomentum = useMemo(() =>
+    calculateSequenceMomentum(data),
+    [data]
+  );
 
-  // 2. VARIABLE-ORDER MARKOV
-  const variableOrderMarkov = useMemo(() => {
-    if (data.length < 10) return null;
+  const entropyWeighting = useMemo(() =>
+    calculateEntropyWeighting(data),
+    [data]
+  );
 
-    const lastDigits = data.slice(-5);
+  const changePointDetection = useMemo(() =>
+    calculateChangePointDetection(data),
+    [data]
+  );
 
-    for (let order = 5; order >= 1; order--) {
-      const context = lastDigits.slice(-order).join(',');
-      if (higherOrderMarkov[order]?.probabilities[context]) {
-        const probs = higherOrderMarkov[order].probabilities[context];
-        const confidence = Math.max(...probs);
+  const bayesianAveraging = useMemo(() =>
+    calculateBayesianAveraging(data, higherOrderMarkov, kneserNeySmoothing, recencyWeightedMarkov),
+    [data, higherOrderMarkov, kneserNeySmoothing, recencyWeightedMarkov]
+  );
 
-        if (confidence > 0.1 || order === 1) {
-          return { order, context, probabilities: probs, confidence };
-        }
-      }
-    }
-
-    return null;
-  }, [data, higherOrderMarkov]);
-
-  // 3. KNESER-NEY SMOOTHING
-  const kneserNeySmoothing = useMemo(() => {
-    if (data.length < 10) return Array(10).fill(0.1);
-
-    const D = 0.75;
-    const predictions = Array(10).fill(0);
-
-    const continuationCounts = Array(10).fill(0);
-    const contextCounts = {};
-
-    for (let i = 1; i < data.length; i++) {
-      const prev = data[i - 1];
-      const curr = data[i];
-      const key = `${prev}-${curr}`;
-      if (!contextCounts[key]) {
-        contextCounts[key] = true;
-        continuationCounts[curr]++;
-      }
-    }
-
-    const totalContinuations = continuationCounts.reduce((a, b) => a + b, 0);
-    const lastDigit = data[data.length - 1];
-
-    if (higherOrderMarkov[1]?.transitions[lastDigit.toString()]) {
-      const counts = higherOrderMarkov[1].transitions[lastDigit.toString()];
-      const total = counts.reduce((a, b) => a + b, 0);
-      const numNonZero = counts.filter(c => c > 0).length;
-
-      for (let i = 0; i < 10; i++) {
-        const discountedCount = Math.max(counts[i] - D, 0);
-        const backoff = (D * numNonZero / total) * (continuationCounts[i] / totalContinuations);
-        predictions[i] = (discountedCount / total) + backoff;
-      }
-    } else {
-      return continuationCounts.map(c => c / totalContinuations);
-    }
-
-    return predictions;
-  }, [data, higherOrderMarkov]);
-
-  // 4. RECENCY-WEIGHTED MARKOV
-  const recencyWeightedMarkov = useMemo(() => {
-    if (data.length < 10) return Array(10).fill(0.1);
-
-    const predictions = Array(10).fill(0);
-    const lastDigit = data[data.length - 1];
-    const decayFactor = 0.95;
-
-    let totalWeight = 0;
-    for (let i = data.length - 2; i >= 0; i--) {
-      if (data[i] === lastDigit) {
-        const weight = Math.pow(decayFactor, data.length - 2 - i);
-        predictions[data[i + 1]] += weight;
-        totalWeight += weight;
-      }
-    }
-
-    if (totalWeight > 0) {
-      return predictions.map(p => p / totalWeight);
-    }
-    return Array(10).fill(0.1);
-  }, [data]);
-
-  // 5. PATTERN COMPLETION
-  const patternCompletion = useMemo(() => {
-    if (data.length < 10) return Array(10).fill(0.1);
-
-    const predictions = Array(10).fill(0);
-    const targetPattern = data.slice(-4).join('');
-    const scores = Array(10).fill(0);
-
-    for (let i = 0; i < data.length - 5; i++) {
-      const pattern = data.slice(i, i + 4).join('');
-      let similarity = 0;
-
-      for (let j = 0; j < 4; j++) {
-        if (pattern[j] === targetPattern[j]) similarity++;
-        else if (Math.abs(parseInt(pattern[j]) - parseInt(targetPattern[j])) <= 1) similarity += 0.5;
-      }
-
-      if (similarity >= 2) {
-        const nextDigit = data[i + 4];
-        scores[nextDigit] += similarity;
-      }
-    }
-
-    const total = scores.reduce((a, b) => a + b, 0);
-    return total > 0 ? scores.map(s => s / total) : Array(10).fill(0.1);
-  }, [data]);
-
-  // 6. POSITIONAL PATTERNS
-  const positionalPatterns = useMemo(() => {
-    if (data.length < 60) return Array(10).fill(0.1);
-
-    const predictions = Array(10).fill(0);
-    const position = data.length % 60;
-
-    for (let i = position; i < data.length - 1; i += 60) {
-      if (i >= 0 && i < data.length - 1) {
-        predictions[data[i + 1]]++;
-      }
-    }
-
-    const total = predictions.reduce((a, b) => a + b, 0);
-    return total > 0 ? predictions.map(p => p / total) : Array(10).fill(0.1);
-  }, [data]);
-
-  // 7. SEQUENCE MOMENTUM
-  const sequenceMomentum = useMemo(() => {
-    if (data.length < 10) return Array(10).fill(0.1);
-
-    const predictions = Array(10).fill(0);
-    const recent = data.slice(-5);
-
-    const firstDeriv = [];
-    for (let i = 1; i < recent.length; i++) {
-      firstDeriv.push(recent[i] - recent[i - 1]);
-    }
-
-    const avgFirstDeriv = firstDeriv.reduce((a, b) => a + b, 0) / firstDeriv.length;
-    const lastDigit = data[data.length - 1];
-    const predicted = Math.round(lastDigit + avgFirstDeriv);
-
-    for (let i = 0; i < 10; i++) {
-      const distance = Math.abs(i - predicted);
-      predictions[i] = Math.exp(-distance * 0.5);
-    }
-
-    const total = predictions.reduce((a, b) => a + b, 0);
-    return predictions.map(p => p / total);
-  }, [data]);
-
-  // 8. BAYESIAN AVERAGING
-  const bayesianAveraging = useMemo(() => {
-    if (data.length < 50) return Array(10).fill(0.1);
-
-    const predictions = Array(10).fill(0);
-    const alpha = 0.1;
-
-    const models = [
-      higherOrderMarkov[1]?.probabilities[data[data.length - 1]?.toString()] || Array(10).fill(0),
-      higherOrderMarkov[2]?.probabilities[data.slice(-2).join(',')] || Array(10).fill(0),
+  const ensemblePrediction = useMemo(() =>
+    calculateEnsemblePrediction(
+      data,
+      higherOrderMarkov,
+      variableOrderMarkov,
       kneserNeySmoothing,
-      recencyWeightedMarkov
-    ];
-
-    models.forEach(model => {
-      for (let i = 0; i < 10; i++) {
-        predictions[i] += model[i] + alpha;
-      }
-    });
-
-    const total = predictions.reduce((a, b) => a + b, 0);
-    return predictions.map(p => p / total);
-  }, [data, higherOrderMarkov, kneserNeySmoothing, recencyWeightedMarkov]);
-
-  // 9. ENTROPY WEIGHTING
-  const entropyWeighting = useMemo(() => {
-    if (data.length < 20) return { entropy: 0.5, patternWeight: 0.5, frequencyWeight: 0.5 };
-
-    const recent = data.slice(-20);
-    const freq = Array(10).fill(0);
-    recent.forEach(d => freq[d]++);
-
-    const entropy = freq.reduce((ent, count) => {
-      if (count === 0) return ent;
-      const p = count / 20;
-      return ent - p * Math.log2(p);
-    }, 0);
-
-    const maxEntropy = Math.log2(10);
-    const normalizedEntropy = entropy / maxEntropy;
-
-    return {
-      entropy: normalizedEntropy,
-      patternWeight: 1 - normalizedEntropy,
-      frequencyWeight: normalizedEntropy
-    };
-  }, [data]);
-
-  // 10. CHANGE POINT DETECTION
-  const changePointDetection = useMemo(() => {
-    if (data.length < 50) return { changePoints: [], currentRegime: 0 };
-
-    const changePoints = [];
-    const windowSz = 20;
-
-    for (let i = windowSz; i < data.length - windowSz; i++) {
-      const before = data.slice(i - windowSz, i);
-      const after = data.slice(i, i + windowSz);
-
-      const meanBefore = before.reduce((a, b) => a + b, 0) / windowSz;
-      const meanAfter = after.reduce((a, b) => a + b, 0) / windowSz;
-
-      const meanChange = Math.abs(meanAfter - meanBefore);
-
-      if (meanChange > 1.5) {
-        changePoints.push({ index: i, meanChange });
-      }
-    }
-
-    const lastChangePoint = changePoints.length > 0 ? changePoints[changePoints.length - 1] : null;
-    const currentRegime = lastChangePoint ? data.length - lastChangePoint.index : data.length;
-
-    return { changePoints, currentRegime };
-  }, [data]);
-
-  // ENSEMBLE PREDICTION
-  const ensemblePrediction = useMemo(() => {
-    if (data.length < 20) return null;
-
-    const methods = [
-      { name: 'Markov 1st Order', probs: higherOrderMarkov[1]?.probabilities[data[data.length - 1]?.toString()] || Array(10).fill(0.1), weight: 0.15 },
-      { name: 'Markov 2nd Order', probs: higherOrderMarkov[2]?.probabilities[data.slice(-2).join(',')] || Array(10).fill(0.1), weight: 0.14 },
-      { name: 'Markov 3rd Order', probs: higherOrderMarkov[3]?.probabilities[data.slice(-3).join(',')] || Array(10).fill(0.1), weight: 0.12 },
-      { name: 'Variable Order Markov', probs: variableOrderMarkov?.probabilities || Array(10).fill(0.1), weight: 0.15 },
-      { name: 'Kneser-Ney Smoothing', probs: kneserNeySmoothing, weight: 0.11 },
-      { name: 'Recency-Weighted', probs: recencyWeightedMarkov, weight: 0.10 },
-      { name: 'Pattern Completion', probs: patternCompletion, weight: 0.10 },
-      { name: 'Positional Cycles', probs: positionalPatterns, weight: 0.06 },
-      { name: 'Sequence Momentum', probs: sequenceMomentum, weight: 0.07 }
-    ];
-
-    const entropyInfo = entropyWeighting;
-    methods.forEach(method => {
-      if (method.name.includes('Pattern') || method.name.includes('Markov')) {
-        method.weight *= (1 + entropyInfo.patternWeight * 0.3);
-      } else {
-        method.weight *= (1 + entropyInfo.frequencyWeight * 0.3);
-      }
-    });
-
-    const totalWeight = methods.reduce((sum, m) => sum + m.weight, 0);
-    methods.forEach(m => m.weight /= totalWeight);
-
-    const combined = Array(10).fill(0);
-    methods.forEach(method => {
-      for (let i = 0; i < 10; i++) {
-        combined[i] += method.probs[i] * method.weight;
-      }
-    });
-
-    const temperature = 1.2;
-    const scaledProbs = combined.map(p => Math.pow(p, 1 / temperature));
-    const total = scaledProbs.reduce((a, b) => a + b, 0);
-    const finalProbs = scaledProbs.map(p => (p / total) * 100);
-
-    const topPredictions = finalProbs
-      .map((prob, digit) => ({ digit, probability: prob }))
-      .sort((a, b) => b.probability - a.probability)
-      .slice(0, 5);
-
-    const entropy = finalProbs.reduce((ent, prob) => {
-      if (prob === 0) return ent;
-      const p = prob / 100;
-      return ent - p * Math.log2(p);
-    }, 0);
-    const maxEntropy = Math.log2(10);
-    const confidence = (1 - entropy / maxEntropy) * 100;
-
-    return {
-      topPredictions,
-      allProbabilities: finalProbs,
-      methods: methods.sort((a, b) => b.weight - a.weight),
-      confidence: confidence.toFixed(1),
-      entropy: entropy.toFixed(2),
-      regimeInfo: changePointDetection,
-      entropyInfo
-    };
-  }, [data, higherOrderMarkov, variableOrderMarkov, kneserNeySmoothing,
+      recencyWeightedMarkov,
+      patternCompletion,
+      positionalPatterns,
+      sequenceMomentum,
+      entropyWeighting,
+      changePointDetection
+    ),
+    [data, higherOrderMarkov, variableOrderMarkov, kneserNeySmoothing,
       recencyWeightedMarkov, patternCompletion, positionalPatterns,
-      sequenceMomentum, entropyWeighting, changePointDetection]);
+      sequenceMomentum, entropyWeighting, changePointDetection]
+  );
 
   const basicStats = useMemo(() => {
     if (data.length === 0) return { frequency: [], mean: 0 };
