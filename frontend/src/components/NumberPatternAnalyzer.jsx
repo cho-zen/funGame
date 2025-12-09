@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Upload, TrendingUp, Activity, BarChart3, Zap, Eye, FileText, Brain, Cpu, Target } from 'lucide-react';
+import { Upload, TrendingUp, Activity, BarChart3, Zap, Eye, FileText, Brain, Cpu, Target, Wifi, X, Loader2 } from 'lucide-react';
 
 // Import prediction methods from the predictions folder
 import {
@@ -22,12 +22,13 @@ const NumberPatternAnalyzer = () => {
   const [windowSize, setWindowSize] = useState(30);
   const [activeTab, setActiveTab] = useState('predict');
   const [textInput, setTextInput] = useState('');
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [connectUsername, setConnectUsername] = useState('');
+  const [connectPassword, setConnectPassword] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectError, setConnectError] = useState('');
+  const [connectLogs, setConnectLogs] = useState([]);
 
-  useEffect(() => {
-    const sampleData = Array.from({ length: 500 }, () => Math.floor(Math.random() * 10));
-    setData(sampleData);
-    setTextInput(sampleData.join(', '));
-  }, []);
 
   const handleTextInput = (text) => {
     setTextInput(text);
@@ -47,6 +48,58 @@ const NumberPatternAnalyzer = () => {
       };
       reader.readAsText(file);
     }
+  };
+
+  const handleConnect = () => {
+    if (!connectUsername || !connectPassword) {
+      setConnectError('Please enter both username and password');
+      return;
+    }
+
+    setIsConnecting(true);
+    setConnectError('');
+    setConnectLogs([]);
+
+    const params = new URLSearchParams({
+      username: connectUsername,
+      password: connectPassword,
+      pages: '15'
+    });
+
+    const eventSource = new EventSource(`http://localhost:3001/api/scrape/stream?${params}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'log') {
+          setConnectLogs(prev => [...prev, { message: data.message, type: data.log_type }]);
+        } else if (data.type === 'error') {
+          setConnectError(data.message);
+          setIsConnecting(false);
+          eventSource.close();
+        } else if (data.type === 'complete') {
+          // Extract numbers from the scraped data (oldest first, newest last)
+          const numbers = data.data.data.Number.map(n => parseInt(n)).filter(n => !isNaN(n) && n >= 0 && n <= 9);
+          // Reverse to get oldest first, newest last
+          const orderedNumbers = numbers.reverse();
+          const numbersText = orderedNumbers.join(', ');
+          setTextInput(numbersText);
+          setData(orderedNumbers);
+          setIsConnecting(false);
+          eventSource.close();
+          // Keep modal open to show completion, user can close manually
+        }
+      } catch (e) {
+        console.error('Error parsing SSE data:', e);
+      }
+    };
+
+    eventSource.onerror = () => {
+      setConnectError('Connection failed. Make sure the backend is running.');
+      setIsConnecting(false);
+      eventSource.close();
+    };
   };
 
   // Use imported prediction methods
@@ -163,6 +216,13 @@ const NumberPatternAnalyzer = () => {
                 className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer"
               />
             </div>
+            <button
+              onClick={() => setShowConnectModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 rounded-full text-white font-semibold transition-all shadow-lg hover:shadow-cyan-500/25"
+            >
+              <Wifi size={18} />
+              Connect
+            </button>
             <div className="ml-auto flex gap-6">
               <div>
                 <div className="text-sm text-gray-400">Data Points</div>
@@ -497,6 +557,129 @@ const NumberPatternAnalyzer = () => {
           )}
         </div>
       </div>
+
+      {/* Connect Modal */}
+      {showConnectModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`bg-slate-800 rounded-xl p-6 w-full border border-purple-500/30 shadow-2xl transition-all duration-300 ${isConnecting || connectLogs.length > 0 ? 'max-w-4xl' : 'max-w-md'}`}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Wifi size={24} className="text-cyan-400" />
+                Connect to Data Source
+              </h3>
+              <button
+                onClick={() => {
+                  setShowConnectModal(false);
+                  setConnectError('');
+                  setConnectLogs([]);
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+                disabled={isConnecting}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className={`${isConnecting || connectLogs.length > 0 ? 'flex gap-6' : ''}`}>
+              {/* Left side - Credentials */}
+              <div className={`space-y-4 ${isConnecting || connectLogs.length > 0 ? 'w-1/3 min-w-[250px]' : 'w-full'}`}>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Username</label>
+                  <input
+                    type="text"
+                    value={connectUsername}
+                    onChange={(e) => setConnectUsername(e.target.value)}
+                    placeholder="Enter your username"
+                    disabled={isConnecting}
+                    className="w-full bg-slate-900/50 border border-purple-500/30 rounded-lg p-3 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Password</label>
+                  <input
+                    type="password"
+                    value={connectPassword}
+                    onChange={(e) => setConnectPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    disabled={isConnecting}
+                    className="w-full bg-slate-900/50 border border-purple-500/30 rounded-lg p-3 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+                  />
+                </div>
+
+                {connectError && (
+                  <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-400 text-sm">
+                    {connectError}
+                  </div>
+                )}
+
+                <button
+                  onClick={handleConnect}
+                  disabled={isConnecting}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 disabled:from-gray-600 disabled:to-gray-600 rounded-lg text-white font-semibold transition-all"
+                >
+                  {isConnecting ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <Wifi size={20} />
+                      Fetch Data
+                    </>
+                  )}
+                </button>
+
+                <p className="text-xs text-gray-500 text-center">
+                  This will scrape data from playrep.pro and load it into the analyzer.
+                </p>
+              </div>
+
+              {/* Right side - Logs */}
+              {(isConnecting || connectLogs.length > 0) && (
+                <div className="flex-1 border-l border-purple-500/30 pl-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Activity size={18} className="text-cyan-400" />
+                    <span className="text-sm font-semibold text-gray-300">Live Logs</span>
+                    {isConnecting && (
+                      <span className="ml-auto flex items-center gap-1 text-xs text-cyan-400">
+                        <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></span>
+                        Processing
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-slate-900/70 rounded-lg p-3 h-80 overflow-y-auto font-mono text-xs space-y-1 scrollbar-thin scrollbar-thumb-purple-500 scrollbar-track-slate-800">
+                    {connectLogs.map((log, index) => (
+                      <div
+                        key={index}
+                        className={`flex items-start gap-2 ${
+                          log.type === 'success' ? 'text-green-400' :
+                          log.type === 'warning' ? 'text-yellow-400' :
+                          log.type === 'error' ? 'text-red-400' :
+                          'text-gray-300'
+                        }`}
+                      >
+                        <span className="text-gray-500 select-none">[{String(index + 1).padStart(2, '0')}]</span>
+                        <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+                          log.type === 'success' ? 'bg-green-400' :
+                          log.type === 'warning' ? 'bg-yellow-400' :
+                          log.type === 'error' ? 'bg-red-400' :
+                          'bg-cyan-400'
+                        }`}></span>
+                        <span>{log.message}</span>
+                      </div>
+                    ))}
+                    {connectLogs.length === 0 && isConnecting && (
+                      <div className="text-gray-500 animate-pulse">Initializing connection...</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
