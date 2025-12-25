@@ -1,0 +1,16 @@
+# Render Blueprint for funGame backend
+# Deploy at: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: fungame-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter  # $7/month - required for Chrome/Selenium
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: PYTHONUNBUFFERED
+        value: 1

@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Upload, TrendingUp, Activity, BarChart3, Zap, Eye, FileText, Brain, Cpu, Target, Wifi, X, Loader2 } from 'lucide-react';
 
+// API URL - uses environment variable in production, localhost in development
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 // Import prediction methods from the predictions folder
 import {
   calculateHigherOrderMarkov,
@@ -66,7 +69,7 @@ const NumberPatternAnalyzer = () => {
       pages: '15'
     });
 
-    const eventSource = new EventSource(`http://localhost:3001/api/scrape/stream?${params}`);
+    const eventSource = new EventSource(`${API_URL}/api/scrape/stream?${params}`);
 
     eventSource.onmessage = (event) => {
       try {
