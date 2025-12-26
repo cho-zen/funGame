@@ -8,7 +8,6 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     libglib2.0-0 \
     libnss3 \
-    libgconf-2-4 \
     libfontconfig1 \
     libx11-6 \
     libx11-xcb1 \
@@ -23,7 +22,6 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libxss1 \
     libxtst6 \
-    libappindicator1 \
     libasound2 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \
@@ -36,6 +34,8 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     xdg-utils \
+    ca-certificates \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Chrome
