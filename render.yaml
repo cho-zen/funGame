@@ -5,9 +5,9 @@ services:
   - type: web
     name: fungame-backend
     runtime: docker
-    dockerfilePath: ./backend/Dockerfile
+    dockerfilePath: ./Dockerfile
     dockerContext: ./backend
-    plan: starter  # $7/month - required for Chrome/Selenium
+    plan: free
     healthCheckPath: /api/health
     envVars:
       - key: PORT
