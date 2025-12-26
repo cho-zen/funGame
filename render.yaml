@@ -1,7 +1,8 @@
-# Render Blueprint for funGame backend
+# Render Blueprint for funGame - Backend + Frontend
 # Deploy at: https://render.com/docs/blueprint-spec
 
 services:
+  # Backend - Flask API with Selenium
   - type: web
     name: fungame-backend
     runtime: docker
@@ -14,3 +15,17 @@ services:
         value: 3001
       - key: PYTHONUNBUFFERED
         value: 1
+
+  # Frontend - Static React Site
+  - type: web
+    name: fungame-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
